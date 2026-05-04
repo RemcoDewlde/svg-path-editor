@@ -1,8 +1,4 @@
-export type PathCommand =
-  | { type: 'M' | 'L'; x: number; y: number }
-  | { type: 'Z' }
-
-export type ViewBox = { x: number; y: number; width: number; height: number }
+import type { PathCommand } from './types'
 
 export function createSvgPoint(svg: SVGSVGElement, x: number, y: number) {
   const p = svg.createSVGPoint()
@@ -17,9 +13,9 @@ export function transformPoint(
   y: number,
   svg: SVGSVGElement | null,
 ) {
-  if (!svg) return { x, y }
-  const p = createSvgPoint(svg, x, y)
-  const out = matrix ? p.matrixTransform(matrix) : p
+  if (!matrix) return { x, y }
+  const point = svg ? createSvgPoint(svg, x, y) : new DOMPoint(x, y)
+  const out = point.matrixTransform(matrix)
   return { x: out.x, y: out.y }
 }
 

@@ -1,5 +1,7 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
 
+import type { PerfCounters } from '@/editor/types'
+
 export type PerfStats = {
   fps: number
   frameMsAvg: number
@@ -19,24 +21,8 @@ export function usePerfStats(params: {
   enabled: boolean
   simulateJank: boolean
   simulateJankMs: string
-  perfCountersRef: MutableRefObject<{
-    panMoves: number
-    dragMoves: number
-    boxMoves: number
-    viewBoxWrites: number
-    viewBoxCommits: number
-    cursorWrites: number
-    cursorCommits: number
-  }>
-  perfLastCountersRef: MutableRefObject<{
-    panMoves: number
-    dragMoves: number
-    boxMoves: number
-    viewBoxWrites: number
-    viewBoxCommits: number
-    cursorWrites: number
-    cursorCommits: number
-  }>
+  perfCountersRef: MutableRefObject<PerfCounters>
+  perfLastCountersRef: MutableRefObject<PerfCounters>
   appRenderCountRef: MutableRefObject<number>
   lastAppRenderCountRef: MutableRefObject<number>
 }) {

@@ -1,24 +1,26 @@
-import { ScrollArea } from '../../components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip'
-import { Button } from '../../components/ui/button'
+import { useMemo } from 'react'
+
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from '../../components/ui/context-menu'
+} from '@/components/ui/context-menu'
 
 import { PanelRight } from 'lucide-react'
-import { LayersPanel, type LayersPanelPathItem } from '../panels/LayersPanel'
+import type { PathMeta } from '@/editor/types'
+import { parsePath } from '@/editor/utils'
+import { clampViewBox } from '@/app/canvas/viewBox'
+import { useEditorStore } from '@/editor/store'
+import { useShallow } from 'zustand/react/shallow'
+import { LayersPanel } from '../panels/LayersPanel'
 
 export function LayersSidebar(props: {
-  layersCollapsed: boolean
-  setLayersCollapsed: (v: boolean) => void
-  pathListItems: LayersPanelPathItem[]
-  selectedPathIndex: number
-  hiddenPathIndexes: number[]
-  setSelectedPathIndex: (index: number) => void
+  pathMetas: PathMeta[]
   setPathHidden: (index: number, hidden: boolean) => void
   deletePathAtIndex: (index: number) => void
   movePathAtIndex: (index: number, direction: -1 | 1) => void
@@ -27,12 +29,7 @@ export function LayersSidebar(props: {
   addNewPathToRoot: () => void
 }) {
   const {
-    layersCollapsed,
-    setLayersCollapsed,
-    pathListItems,
-    selectedPathIndex,
-    hiddenPathIndexes,
-    setSelectedPathIndex,
+    pathMetas,
     setPathHidden,
     deletePathAtIndex,
     movePathAtIndex,
@@ -40,6 +37,42 @@ export function LayersSidebar(props: {
     addNewLayerGroup,
     addNewPathToRoot,
   } = props
+
+  const pathListItems = useMemo(() => {
+    return pathMetas.map((m) => {
+      try {
+        const cmds = parsePath(m.d)
+        const pts = cmds.filter((c) => c.type !== 'Z') as Array<{ type: 'M' | 'L'; x: number; y: number }>
+        if (!pts.length) return { ...m, viewBox: { x: 0, y: 0, width: 1, height: 1 } }
+        const xs = pts.map((p) => p.x)
+        const ys = pts.map((p) => p.y)
+        const minX = Math.min(...xs)
+        const minY = Math.min(...ys)
+        const maxX = Math.max(...xs)
+        const maxY = Math.max(...ys)
+        const pad = 6
+        const vb = clampViewBox({
+          x: minX - pad,
+          y: minY - pad,
+          width: maxX - minX + pad * 2,
+          height: maxY - minY + pad * 2,
+        })
+        return { ...m, viewBox: vb }
+      } catch {
+        return { ...m, viewBox: { x: 0, y: 0, width: 1, height: 1 } }
+      }
+    })
+  }, [pathMetas])
+
+  const { layersCollapsed, setLayersCollapsed, selectedPathIndex, setSelectedPathIndex, hiddenPathIndexes } = useEditorStore(
+    useShallow((s) => ({
+      layersCollapsed: s.layersCollapsed,
+      setLayersCollapsed: s.setLayersCollapsed,
+      selectedPathIndex: s.selectedPathIndex,
+      setSelectedPathIndex: s.setSelectedPathIndex,
+      hiddenPathIndexes: s.hiddenPathIndexes,
+    })),
+  )
 
   return (
     <aside className={layersCollapsed ? 'hidden w-[56px] shrink-0 border-l bg-background md:block' : 'hidden w-[340px] shrink-0 border-l bg-background md:block'}>
@@ -64,6 +97,7 @@ export function LayersSidebar(props: {
                 const displayName = m.dataLabel || m.id || m.label
                 const stroke = m.stroke || (m.fill ? 'none' : '#111')
                 const fill = m.fill || 'none'
+                const viewBox = m.viewBox ?? { x: 0, y: 0, width: 1, height: 1 }
                 return (
                   <Tooltip key={m.index}>
                     <ContextMenu>
@@ -85,10 +119,7 @@ export function LayersSidebar(props: {
                                   : 'h-full w-full rounded-md bg-background p-1'
                               }
                             >
-                              <svg
-                                className="block h-full w-full"
-                                viewBox={`${m.viewBox.x} ${m.viewBox.y} ${m.viewBox.width} ${m.viewBox.height}`}
-                              >
+                              <svg className="block h-full w-full" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}>
                                 <path
                                   d={m.d}
                                   fill={fill}
@@ -126,11 +157,6 @@ export function LayersSidebar(props: {
       ) : (
         <LayersPanel
           pathListItems={pathListItems}
-          selectedPathIndex={selectedPathIndex}
-          hiddenPathIndexes={hiddenPathIndexes}
-          layersCollapsed={layersCollapsed}
-          setLayersCollapsed={setLayersCollapsed}
-          setSelectedPathIndex={setSelectedPathIndex}
           setPathHidden={setPathHidden}
           deletePathAtIndex={deletePathAtIndex}
           movePathAtIndex={movePathAtIndex}

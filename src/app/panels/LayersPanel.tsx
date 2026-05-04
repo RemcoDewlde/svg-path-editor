@@ -1,38 +1,23 @@
-import { Button } from '../../components/ui/button'
-import { ScrollArea } from '../../components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from '../../components/ui/context-menu'
+} from '@/components/ui/context-menu'
 
 import { Eye, EyeOff, Layers, PanelRight, Plus, X } from 'lucide-react'
-import { ellipsisText } from '../utils/text'
+import { ellipsisText } from '@/app/utils/text'
 
-export type LayersPanelPathItem = {
-  index: number
-  label: string
-  d: string
-  id?: string
-  dataLabel?: string
-  groupId?: string
-  fill?: string
-  stroke?: string
-  opacity?: string
-  hidden?: boolean
-  viewBox: { x: number; y: number; width: number; height: number }
-}
+import type { PathMeta } from '@/editor/types'
+import { useEditorStore } from '@/editor/store'
+import { useShallow } from 'zustand/react/shallow'
 
 export function LayersPanel(props: {
-  pathListItems: LayersPanelPathItem[]
-  selectedPathIndex: number
-  hiddenPathIndexes: number[]
-  layersCollapsed: boolean
-  setLayersCollapsed: (v: boolean) => void
-  setSelectedPathIndex: (index: number) => void
+  pathListItems: PathMeta[]
   setPathHidden: (index: number, hidden: boolean) => void
   deletePathAtIndex: (index: number) => void
   movePathAtIndex: (index: number, direction: -1 | 1) => void
@@ -42,11 +27,6 @@ export function LayersPanel(props: {
 }) {
   const {
     pathListItems,
-    selectedPathIndex,
-    hiddenPathIndexes,
-    layersCollapsed,
-    setLayersCollapsed,
-    setSelectedPathIndex,
     setPathHidden,
     deletePathAtIndex,
     movePathAtIndex,
@@ -54,6 +34,16 @@ export function LayersPanel(props: {
     addNewLayerGroup,
     addNewPathToRoot,
   } = props
+
+  const { layersCollapsed, setLayersCollapsed, selectedPathIndex, setSelectedPathIndex, hiddenPathIndexes } = useEditorStore(
+    useShallow((s) => ({
+      layersCollapsed: s.layersCollapsed,
+      setLayersCollapsed: s.setLayersCollapsed,
+      selectedPathIndex: s.selectedPathIndex,
+      setSelectedPathIndex: s.setSelectedPathIndex,
+      hiddenPathIndexes: s.hiddenPathIndexes,
+    })),
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -109,6 +99,7 @@ export function LayersPanel(props: {
                 const displayNameShort = ellipsisText(displayName, 34)
                 const stroke = m.stroke || (m.fill ? 'none' : '#111')
                 const fill = m.fill || 'none'
+                const viewBox = m.viewBox ?? { x: 0, y: 0, width: 1, height: 1 }
                 return (
                   <ContextMenu key={m.index}>
                     <ContextMenuTrigger asChild>
@@ -129,7 +120,7 @@ export function LayersPanel(props: {
                         }
                       >
                         <div className="h-12 w-12 shrink-0 rounded border bg-background p-1">
-                          <svg width={40} height={40} viewBox={`${m.viewBox.x} ${m.viewBox.y} ${m.viewBox.width} ${m.viewBox.height}`}>
+                          <svg width={40} height={40} viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}>
                             <path d={m.d} fill={fill} stroke={stroke} strokeWidth={2} opacity={m.opacity || undefined} />
                           </svg>
                         </div>

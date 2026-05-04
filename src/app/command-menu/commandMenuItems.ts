@@ -1,4 +1,11 @@
-import type { CommandMenuItem } from '../CommandMenu'
+export type CommandMenuItem = {
+  id: string
+  label: string
+  keywords?: string
+  rightHint?: string
+  disabled?: boolean
+  onSelect: () => void
+}
 
 export function buildCommandMenuItems(opts: {
   hasDoc: boolean

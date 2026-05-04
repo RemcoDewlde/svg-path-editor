@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { cn } from '../lib/utils'
+import { cn } from '@/lib/utils'
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog'
-import { Input } from '../components/ui/input'
-import { ScrollArea } from '../components/ui/scroll-area'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
-export type CommandMenuItem = {
-  id: string
-  label: string
-  keywords?: string
-  rightHint?: string
-  disabled?: boolean
-  onSelect: () => void
-}
+import type { CommandMenuItem } from '@/app/command-menu/commandMenuItems'
 
 function normalize(s: string) {
   return s.trim().toLowerCase()

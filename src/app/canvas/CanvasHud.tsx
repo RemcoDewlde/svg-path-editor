@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { Button } from '../../components/ui/button'
-import { Input } from '../../components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ZoomIn, ZoomOut } from 'lucide-react'
 
 export function CanvasHud({

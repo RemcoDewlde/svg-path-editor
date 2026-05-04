@@ -1,9 +1,9 @@
-import { Button } from '../../components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
-import { Input } from '../../components/ui/input'
-import { Label } from '../../components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
-export type RenameTarget = null | { kind: 'path' | 'layer'; index: number }
+import type { RenameTarget } from '@/editor/types'
 
 export type RenameDialogProps = {
   open: boolean

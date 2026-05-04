@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 
-import MonacoEditor from '@monaco-editor/react'
 import { Bug, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react'
 
-import { Button } from '../../components/ui/button'
-import { Input } from '../../components/ui/input'
-import { Label } from '../../components/ui/label'
-import { Separator } from '../../components/ui/separator'
-import { Switch } from '../../components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 
-import { lintPathD, lintSvg } from '../../editor/lint'
-import { buildPath, parsePath, type PathCommand } from '../../editor/utils'
+import { lintPathD, lintSvg } from '@/editor/lint'
+import { buildPath, parsePath } from '@/editor/utils'
+import type { PathCommand, PerfCounters } from '@/editor/types'
+import { useEditorStore } from '@/editor/store'
+import { useShallow } from 'zustand/react/shallow'
 
 import { usePerfStats } from './usePerfStats'
+
+const MonacoEditor = React.lazy(() => import('@monaco-editor/react').then((m) => ({ default: m.default })))
 
 function formatPathDMaybe(d: string) {
   // Only formats paths compatible with this editor.
@@ -54,29 +58,9 @@ function formatXmlPretty(xml: string) {
   return serializeNode(root, '').trim() + '\n'
 }
 
-type PerfCounters = {
-  panMoves: number
-  dragMoves: number
-  boxMoves: number
-  viewBoxWrites: number
-  viewBoxCommits: number
-  cursorWrites: number
-  cursorCommits: number
-}
-
 export type DebugDockProps = {
-  enabled: boolean
-  dockOpen: boolean
-  setDockOpen: (open: boolean) => void
-  dockHeight: number
-  setDockHeight: (height: number) => void
-
-  outputSvg: string
   outputPath: string
-  activePathIndex: number
-
   // Editor callbacks
-  setStatus: (value: string) => void
   applyPathCommands: (commands: PathCommand[]) => void
   applySvgSerialized: (serializedSvg: string, pathCount: number) => void
 
@@ -88,23 +72,29 @@ export type DebugDockProps = {
 }
 
 export function DebugDock(props: DebugDockProps) {
+  const { outputPath, applyPathCommands, applySvgSerialized, perfCountersRef, perfLastCountersRef, appRenderCountRef, lastAppRenderCountRef } = props
+
   const {
-    enabled,
-    dockOpen,
-    setDockOpen,
-    dockHeight,
-    setDockHeight,
-    outputSvg,
-    outputPath,
-    activePathIndex,
+    debugUiVisible,
+    debugDockOpen,
+    setDebugDockOpen,
+    debugDockHeight,
+    setDebugDockHeight,
+    sourceSvg,
+    selectedPathIndex,
     setStatus,
-    applyPathCommands,
-    applySvgSerialized,
-    perfCountersRef,
-    perfLastCountersRef,
-    appRenderCountRef,
-    lastAppRenderCountRef,
-  } = props
+  } = useEditorStore(
+    useShallow((s) => ({
+      debugUiVisible: s.debugUiVisible,
+      debugDockOpen: s.debugDockOpen,
+      setDebugDockOpen: s.setDebugDockOpen,
+      debugDockHeight: s.debugDockHeight,
+      setDebugDockHeight: s.setDebugDockHeight,
+      sourceSvg: s.sourceSvg,
+      selectedPathIndex: s.selectedPathIndex,
+      setStatus: s.setStatus,
+    })),
+  )
 
   const [tab, setTab] = useState<'svg' | 'path' | 'perf'>('svg')
   const [live, setLive] = useState(true)
@@ -125,7 +115,7 @@ export function DebugDock(props: DebugDockProps) {
   const [simulateJankMs, setSimulateJankMs] = useState('0')
 
   const perfStats = usePerfStats({
-    enabled: enabled && dockOpen && tab === 'perf',
+    enabled: debugUiVisible && debugDockOpen && tab === 'perf',
     simulateJank,
     simulateJankMs,
     perfCountersRef,
@@ -134,7 +124,7 @@ export function DebugDock(props: DebugDockProps) {
     lastAppRenderCountRef,
   })
 
-  const canApplyPath = activePathIndex >= 0
+  const canApplyPath = selectedPathIndex >= 0
 
   function scheduleApply(next: { svg?: string; path?: string }) {
     if (!live) return
@@ -207,12 +197,12 @@ export function DebugDock(props: DebugDockProps) {
 
   // When following, keep drafts synced to current output.
   useEffect(() => {
-    if (!enabled || !dockOpen || !followCurrent) return
-    if (!outputSvg) return
-    setSvgDraft(outputSvg)
+    if (!debugUiVisible || !debugDockOpen || !followCurrent) return
+    if (!sourceSvg) return
+    setSvgDraft(sourceSvg)
     setPathDraft(outputPath)
     // Don't clear error here; it might contain useful parse errors.
-  }, [enabled, dockOpen, followCurrent, outputSvg, outputPath])
+  }, [debugUiVisible, debugDockOpen, followCurrent, sourceSvg, outputPath])
 
   // Resizing handlers live in the dock, not App.
   useEffect(() => {
@@ -220,7 +210,7 @@ export function DebugDock(props: DebugDockProps) {
       if (!isResizingRef.current || !resizeStartRef.current) return
       const dy = resizeStartRef.current.y - event.clientY
       const next = Math.max(160, Math.min(window.innerHeight * 0.95, resizeStartRef.current.height + dy))
-      setDockHeight(next)
+      setDebugDockHeight(next)
     }
     function onMouseUp() {
       if (!isResizingRef.current) return
@@ -235,14 +225,14 @@ export function DebugDock(props: DebugDockProps) {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
     }
-  }, [setDockHeight])
+  }, [setDebugDockHeight])
 
   const statusText = useMemo(() => {
     if (error) return { kind: 'error' as const, text: error }
-    return { kind: 'muted' as const, text: dockOpen ? (live ? 'Live' : 'Manual') : 'Hidden' }
-  }, [dockOpen, live, error])
+    return { kind: 'muted' as const, text: debugDockOpen ? (live ? 'Live' : 'Manual') : 'Hidden' }
+  }, [debugDockOpen, live, error])
 
-  if (!enabled) return null
+  if (!debugUiVisible) return null
 
   return (
     <div className="shrink-0 border-t bg-background">
@@ -253,9 +243,9 @@ export function DebugDock(props: DebugDockProps) {
             variant="ghost"
             className="h-8 px-2"
             onClick={() => {
-              setDockOpen(!dockOpen)
-              if (!dockOpen) {
-                setSvgDraft(outputSvg)
+              setDebugDockOpen(!debugDockOpen)
+              if (!debugDockOpen) {
+                setSvgDraft(sourceSvg)
                 setPathDraft(outputPath)
                 setError('')
               }
@@ -263,7 +253,7 @@ export function DebugDock(props: DebugDockProps) {
           >
             <Bug className="mr-2 h-4 w-4" />
             Debug
-            {dockOpen ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronUp className="ml-2 h-4 w-4" />}
+            {debugDockOpen ? <ChevronDown className="ml-2 h-4 w-4" /> : <ChevronUp className="ml-2 h-4 w-4" />}
           </Button>
           {statusText.kind === 'error' ? (
             <div className="truncate text-xs text-destructive">{statusText.text}</div>
@@ -301,16 +291,16 @@ export function DebugDock(props: DebugDockProps) {
         </div>
       </div>
 
-      {dockOpen ? (
-        <div style={{ height: dockHeight }} className="border-t">
+      {debugDockOpen ? (
+        <div style={{ height: debugDockHeight }} className="border-t">
           <div
             className="flex h-4 cursor-row-resize items-center justify-center border-b bg-muted/40 text-muted-foreground"
-            onMouseDown={(e) => {
-              isResizingRef.current = true
-              resizeStartRef.current = { y: e.clientY, height: dockHeight }
-              document.body.style.cursor = 'row-resize'
-              document.body.style.userSelect = 'none'
-            }}
+                  onMouseDown={(e) => {
+                    isResizingRef.current = true
+                    resizeStartRef.current = { y: e.clientY, height: debugDockHeight }
+                    document.body.style.cursor = 'row-resize'
+                    document.body.style.userSelect = 'none'
+                  }}
             title="Drag to resize"
           >
             <GripHorizontal className="h-4 w-4" />
@@ -336,12 +326,12 @@ export function DebugDock(props: DebugDockProps) {
                   variant="secondary"
                   className="h-7"
                   onClick={() => {
-                    setSvgDraft(outputSvg)
+                    setSvgDraft(sourceSvg)
                     setPathDraft(outputPath)
                     setError('')
                     setStatus('Loaded current SVG/path into debug dock.')
                   }}
-                  disabled={!outputSvg || tab === 'perf' || followCurrent}
+                  disabled={!sourceSvg || tab === 'perf' || followCurrent}
                 >
                   Load current
                 </Button>
@@ -381,7 +371,7 @@ export function DebugDock(props: DebugDockProps) {
                 </Button>
 
                 <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-                  {tab === 'path' ? (canApplyPath ? `Active: #${activePathIndex + 1}` : 'No active path') : null}
+                  {tab === 'path' ? (canApplyPath ? `Active: #${selectedPathIndex + 1}` : 'No active path') : null}
                 </div>
               </div>
             </div>
@@ -480,46 +470,50 @@ export function DebugDock(props: DebugDockProps) {
                     </div>
                   </div>
                 </div>
-              ) : tab === 'svg' ? (
-                <MonacoEditor
-                  height="100%"
-                  defaultLanguage="xml"
-                  value={svgDraft}
-                  onChange={(v) => {
-                    if (followCurrent) return
-                    const next = v ?? ''
-                    setSvgDraft(next)
-                    setError('')
-                    if (live) scheduleApply({ svg: next })
-                  }}
-                  options={{
-                    readOnly: followCurrent,
-                    minimap: { enabled: false },
-                    fontSize: 12,
-                    wordWrap: 'on',
-                    scrollBeyondLastLine: false,
-                  }}
-                />
               ) : (
-                <MonacoEditor
-                  height="100%"
-                  defaultLanguage="plaintext"
-                  value={pathDraft}
-                  onChange={(v) => {
-                    if (followCurrent) return
-                    const next = v ?? ''
-                    setPathDraft(next)
-                    setError('')
-                    if (live) scheduleApply({ path: next })
-                  }}
-                  options={{
-                    readOnly: followCurrent,
-                    minimap: { enabled: false },
-                    fontSize: 12,
-                    wordWrap: 'on',
-                    scrollBeyondLastLine: false,
-                  }}
-                />
+                <Suspense fallback={<div className="h-full w-full p-4 text-xs text-muted-foreground">Loading editor…</div>}>
+                  {tab === 'svg' ? (
+                    <MonacoEditor
+                      height="100%"
+                      defaultLanguage="xml"
+                      value={svgDraft}
+                      onChange={(v) => {
+                        if (followCurrent) return
+                        const next = v ?? ''
+                        setSvgDraft(next)
+                        setError('')
+                        if (live) scheduleApply({ svg: next })
+                      }}
+                      options={{
+                        readOnly: followCurrent,
+                        minimap: { enabled: false },
+                        fontSize: 12,
+                        wordWrap: 'on',
+                        scrollBeyondLastLine: false,
+                      }}
+                    />
+                  ) : (
+                    <MonacoEditor
+                      height="100%"
+                      defaultLanguage="plaintext"
+                      value={pathDraft}
+                      onChange={(v) => {
+                        if (followCurrent) return
+                        const next = v ?? ''
+                        setPathDraft(next)
+                        setError('')
+                        if (live) scheduleApply({ path: next })
+                      }}
+                      options={{
+                        readOnly: followCurrent,
+                        minimap: { enabled: false },
+                        fontSize: 12,
+                        wordWrap: 'on',
+                        scrollBeyondLastLine: false,
+                      }}
+                    />
+                  )}
+                </Suspense>
               )}
             </div>
 

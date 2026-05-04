@@ -1,17 +1,18 @@
-import { Button } from '../../components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FileUp } from 'lucide-react'
+
+import { useEditorStore } from '@/editor/store'
 
 export type OpenSvgDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceSvg: string
   onOpenFile: () => Promise<void>
-  afterOpenHasSvg: () => boolean
 }
 
 export function OpenSvgDialog(props: OpenSvgDialogProps) {
-  const { open, onOpenChange, sourceSvg, onOpenFile, afterOpenHasSvg } = props
+  const { open, onOpenChange, sourceSvg, onOpenFile } = props
 
   return (
     <Dialog
@@ -34,7 +35,7 @@ export function OpenSvgDialog(props: OpenSvgDialogProps) {
             onClick={async () => {
               await onOpenFile()
               // onOpenFile sets sourceSvg; the effect will close/allow close.
-              if (afterOpenHasSvg()) onOpenChange(false)
+              if (useEditorStore.getState().sourceSvg) onOpenChange(false)
             }}
           >
             <FileUp className="mr-2 h-4 w-4" />

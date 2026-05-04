@@ -1,10 +1,10 @@
-import type * as React from 'react'
+import type { ReactNode } from 'react'
 
-import { Button } from '../../components/ui/button'
-import { Separator } from '../../components/ui/separator'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../../components/ui/sheet'
-import { Switch } from '../../components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 import {
   FileDown,
@@ -21,60 +21,53 @@ import {
   Undo2,
 } from 'lucide-react'
 
-import type { LayersPanelPathItem } from '../panels/LayersPanel'
-import { LayersPanel } from '../panels/LayersPanel'
+import type { PathMeta } from '@/editor/types'
+import { useEditorStore } from '@/editor/store'
+import { useShallow } from 'zustand/react/shallow'
+import { LayersSidebar } from '@/app/sidebars/LayersSidebar'
 
 export function TopBar(props: {
-  fileName: string
   dirty: boolean
-  undoCount: number
-  redoCount: number
   onUndo: () => void
   onRedo: () => void
-
-  selectionToolActive: boolean
-  setSelectionToolActive: (v: boolean) => void
-  gridVisible: boolean
-  setGridVisible: (v: boolean) => void
-  nodesVisible: boolean
-  setNodesVisible: (v: boolean) => void
-  snapToGrid: boolean
-  setSnapToGrid: (v: boolean) => void
 
   onOpenSettings: () => void
   onOpenFile: () => void
   onSaveFile: (forceSaveAs: boolean) => void
-  sourceSvgPresent: boolean
 
-  autoSaveEnabled: boolean
-  setAutoSaveEnabled: (v: boolean) => void
-  fileHandlePresent: boolean
-  setStatus: (msg: string) => void
+  inspector: ReactNode
 
-  inspector: React.ReactNode
-
-  layersPanelProps: {
-    pathListItems: LayersPanelPathItem[]
-    selectedPathIndex: number
-    hiddenPathIndexes: number[]
-    layersCollapsed: boolean
-    setLayersCollapsed: (v: boolean) => void
-    setSelectedPathIndex: (index: number) => void
-    setPathHidden: (index: number, hidden: boolean) => void
-    deletePathAtIndex: (index: number) => void
-    movePathAtIndex: (index: number, direction: -1 | 1) => void
-    openRenameDialog: (kind: 'path' | 'layer', index: number) => void
-    addNewLayerGroup: (name: string) => void
-    addNewPathToRoot: () => void
-  }
+  pathMetas: PathMeta[]
+  setPathHidden: (index: number, hidden: boolean) => void
+  deletePathAtIndex: (index: number) => void
+  movePathAtIndex: (index: number, direction: -1 | 1) => void
+  openRenameDialog: (kind: 'path' | 'layer', index: number) => void
+  addNewLayerGroup: (name: string) => void
+  addNewPathToRoot: () => void
 }) {
   const {
-    fileName,
     dirty,
-    undoCount,
-    redoCount,
     onUndo,
     onRedo,
+    onOpenSettings,
+    onOpenFile,
+    onSaveFile,
+    inspector,
+    pathMetas,
+    setPathHidden,
+    deletePathAtIndex,
+    movePathAtIndex,
+    openRenameDialog,
+    addNewLayerGroup,
+    addNewPathToRoot,
+  } = props
+
+  const {
+    fileName,
+    sourceSvgPresent,
+    fileHandlePresent,
+    undoCount,
+    redoCount,
     selectionToolActive,
     setSelectionToolActive,
     gridVisible,
@@ -83,17 +76,29 @@ export function TopBar(props: {
     setNodesVisible,
     snapToGrid,
     setSnapToGrid,
-    onOpenSettings,
-    onOpenFile,
-    onSaveFile,
-    sourceSvgPresent,
     autoSaveEnabled,
     setAutoSaveEnabled,
-    fileHandlePresent,
     setStatus,
-    inspector,
-    layersPanelProps,
-  } = props
+  } = useEditorStore(
+    useShallow((s) => ({
+      fileName: s.fileName,
+      sourceSvgPresent: Boolean(s.sourceSvg),
+      fileHandlePresent: Boolean(s.fileHandle),
+      undoCount: s.undoStack.length,
+      redoCount: s.redoStack.length,
+      selectionToolActive: s.selectionToolActive,
+      setSelectionToolActive: s.setSelectionToolActive,
+      gridVisible: s.gridVisible,
+      setGridVisible: s.setGridVisible,
+      nodesVisible: s.nodesVisible,
+      setNodesVisible: s.setNodesVisible,
+      snapToGrid: s.snapToGrid,
+      setSnapToGrid: s.setSnapToGrid,
+      autoSaveEnabled: s.autoSaveEnabled,
+      setAutoSaveEnabled: s.setAutoSaveEnabled,
+      setStatus: s.setStatus,
+    })),
+  )
 
   return (
     <header className="shrink-0 border-b bg-background shadow-sm">
@@ -247,7 +252,15 @@ export function TopBar(props: {
               <SheetHeader className="p-4">
                 <SheetTitle>Layers</SheetTitle>
               </SheetHeader>
-              <LayersPanel {...layersPanelProps} />
+              <LayersSidebar
+                pathMetas={pathMetas}
+                setPathHidden={setPathHidden}
+                deletePathAtIndex={deletePathAtIndex}
+                movePathAtIndex={movePathAtIndex}
+                openRenameDialog={openRenameDialog}
+                addNewLayerGroup={addNewLayerGroup}
+                addNewPathToRoot={addNewPathToRoot}
+              />
             </SheetContent>
           </Sheet>
         </div>

@@ -6,7 +6,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from '../../components/ui/context-menu'
+} from '@/components/ui/context-menu'
 
 import {
   flipBothTransformer,
@@ -14,14 +14,13 @@ import {
   mirrorVerticalTransformer,
   rotateTransformer,
   type Bounds,
-} from '../../editor/utils'
+} from '@/editor/utils'
+
+import { useEditorStore } from '@/editor/store'
 
 export function NodeContextMenu({
   index,
-  selectedIndices,
   disableSelectNode,
-  clipboardPath,
-  clipboardCommandsLength,
   onSelectOnlyPoint,
   onTogglePointSelection,
   onSelectRangeToIndex,
@@ -34,10 +33,7 @@ export function NodeContextMenu({
   children,
 }: {
   index: number
-  selectedIndices: number[]
   disableSelectNode: boolean
-  clipboardPath: null | { d: string; attrs: Record<string, string> }
-  clipboardCommandsLength: number
   onSelectOnlyPoint: (index: number) => void
   onTogglePointSelection: (index: number) => void
   onSelectRangeToIndex: (index: number) => void
@@ -52,6 +48,9 @@ export function NodeContextMenu({
   onDeleteSelectedPoints: () => void
   children: React.ReactElement
 }) {
+  const selectedIndices = useEditorStore((s) => s.selectedIndices)
+  const clipboardPath = useEditorStore((s) => s.clipboardPath)
+  const clipboardCommandsLength = useEditorStore((s) => s.clipboardCommands.length)
   const hasSelection = selectedIndices.length > 0
   const canPaste = Boolean(clipboardPath) || clipboardCommandsLength > 0
 

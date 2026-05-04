@@ -1,9 +1,14 @@
-import { Button } from '../../components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
-import { Input } from '../../components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
-import { Separator } from '../../components/ui/separator'
-import { Switch } from '../../components/ui/switch'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+
+import { useShallow } from 'zustand/react/shallow'
+
+import { useEditorStore } from '@/editor/store'
+import type { UiPointSize } from '@/editor/types'
 
 type SettingsTab = 'general' | 'grid' | 'appearance' | 'keys'
 
@@ -12,66 +17,13 @@ export type SettingsDialogProps = {
   onOpenChange: (open: boolean) => void
   tab: SettingsTab
   setTab: (tab: SettingsTab) => void
-
-  // General
-  themeMode: 'system' | 'light' | 'dark'
-  setThemeMode: (value: 'system' | 'light' | 'dark') => void
-  nodesVisible: boolean
-  setNodesVisible: (value: boolean) => void
-  selectionToolActive: boolean
-  setSelectionToolActive: (value: boolean) => void
-  debugUiVisible: boolean
-  setDebugUiVisible: (value: boolean) => void
-  autoSaveEnabled: boolean
-  setAutoSaveEnabled: (value: boolean) => void
-  fileHandle: FileSystemFileHandle | null
-  setStatus: (value: string) => void
-
-  // Grid
-  gridVisible: boolean
-  setGridVisible: (value: boolean) => void
-  snapToGrid: boolean
-  setSnapToGrid: (value: boolean) => void
-  gridSize: number
-  setGridSize: (value: number) => void
-  majorGridEvery: number
-  setMajorGridEvery: (value: number) => void
-
-  // Appearance
   pointRadiusBase: number
-  uiOverlayStrokeWidthScale: number
-  setUiOverlayStrokeWidthScale: (value: number) => void
-  uiPointSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-  setUiPointSize: (value: 'xs' | 'sm' | 'md' | 'lg' | 'xl') => void
-  uiSelectionStroke: string
-  setUiSelectionStroke: (value: string) => void
-  uiSelectionDash: string
-  setUiSelectionDash: (value: string) => void
-  uiSelectionFill: string
-  setUiSelectionFill: (value: string) => void
-  uiSelectionFillOpacity: number
-  setUiSelectionFillOpacity: (value: number) => void
-  uiOutlineStroke: string
-  setUiOutlineStroke: (value: string) => void
-  uiOutlineDash: string
-  setUiOutlineDash: (value: string) => void
-  uiSegmentStroke: string
-  setUiSegmentStroke: (value: string) => void
-  uiSegmentHoverStroke: string
-  setUiSegmentHoverStroke: (value: string) => void
-  uiGridStroke: string
-  setUiGridStroke: (value: string) => void
-  uiGridMajorStroke: string
-  setUiGridMajorStroke: (value: string) => void
-  resetUiAppearance: () => void
 }
 
 export function SettingsDialog(props: SettingsDialogProps) {
+  const { open, onOpenChange, tab, setTab, pointRadiusBase } = props
+
   const {
-    open,
-    onOpenChange,
-    tab,
-    setTab,
     themeMode,
     setThemeMode,
     nodesVisible,
@@ -92,7 +44,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
     setGridSize,
     majorGridEvery,
     setMajorGridEvery,
-    pointRadiusBase,
     uiOverlayStrokeWidthScale,
     setUiOverlayStrokeWidthScale,
     uiPointSize,
@@ -118,7 +69,55 @@ export function SettingsDialog(props: SettingsDialogProps) {
     uiGridMajorStroke,
     setUiGridMajorStroke,
     resetUiAppearance,
-  } = props
+  } = useEditorStore(
+    useShallow((s) => ({
+      themeMode: s.themeMode,
+      setThemeMode: s.setThemeMode,
+      nodesVisible: s.nodesVisible,
+      setNodesVisible: s.setNodesVisible,
+      selectionToolActive: s.selectionToolActive,
+      setSelectionToolActive: s.setSelectionToolActive,
+      debugUiVisible: s.debugUiVisible,
+      setDebugUiVisible: s.setDebugUiVisible,
+      autoSaveEnabled: s.autoSaveEnabled,
+      setAutoSaveEnabled: s.setAutoSaveEnabled,
+      fileHandle: s.fileHandle,
+      setStatus: s.setStatus,
+      gridVisible: s.gridVisible,
+      setGridVisible: s.setGridVisible,
+      snapToGrid: s.snapToGrid,
+      setSnapToGrid: s.setSnapToGrid,
+      gridSize: s.gridSize,
+      setGridSize: s.setGridSize,
+      majorGridEvery: s.majorGridEvery,
+      setMajorGridEvery: s.setMajorGridEvery,
+      uiOverlayStrokeWidthScale: s.uiOverlayStrokeWidthScale,
+      setUiOverlayStrokeWidthScale: s.setUiOverlayStrokeWidthScale,
+      uiPointSize: s.uiPointSize,
+      setUiPointSize: s.setUiPointSize,
+      uiSelectionStroke: s.uiSelectionStroke,
+      setUiSelectionStroke: s.setUiSelectionStroke,
+      uiSelectionDash: s.uiSelectionDash,
+      setUiSelectionDash: s.setUiSelectionDash,
+      uiSelectionFill: s.uiSelectionFill,
+      setUiSelectionFill: s.setUiSelectionFill,
+      uiSelectionFillOpacity: s.uiSelectionFillOpacity,
+      setUiSelectionFillOpacity: s.setUiSelectionFillOpacity,
+      uiOutlineStroke: s.uiOutlineStroke,
+      setUiOutlineStroke: s.setUiOutlineStroke,
+      uiOutlineDash: s.uiOutlineDash,
+      setUiOutlineDash: s.setUiOutlineDash,
+      uiSegmentStroke: s.uiSegmentStroke,
+      setUiSegmentStroke: s.setUiSegmentStroke,
+      uiSegmentHoverStroke: s.uiSegmentHoverStroke,
+      setUiSegmentHoverStroke: s.setUiSegmentHoverStroke,
+      uiGridStroke: s.uiGridStroke,
+      setUiGridStroke: s.setUiGridStroke,
+      uiGridMajorStroke: s.uiGridMajorStroke,
+      setUiGridMajorStroke: s.setUiGridMajorStroke,
+      resetUiAppearance: s.resetUiAppearance,
+    })),
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -348,7 +347,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground">Point size</div>
-                      <Select value={uiPointSize} onValueChange={(v) => setUiPointSize(v as SettingsDialogProps['uiPointSize'])}>
+                      <Select value={uiPointSize} onValueChange={(v) => setUiPointSize(v as UiPointSize)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select size" />
                         </SelectTrigger>
