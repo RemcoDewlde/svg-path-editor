@@ -1,4 +1,5 @@
 import { useMemo, type RefObject } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import {
   ContextMenu,
@@ -7,8 +8,9 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import type { PathCommand } from '@/editor/types'
-import { transformPoint, type Bounds } from '@/editor/utils'
+import { buildTransformedPathD, getSegments, transformPoint, type Bounds } from '@/editor/utils'
 import { NodeContextMenu } from '@/app/menus/NodeContextMenu'
+import { useEditorStore } from '@/editor/store'
 
 type GridPattern = {
   size: number
@@ -21,8 +23,6 @@ type SelectionRect = { x: number; y: number; width: number; height: number } | n
 
 type RectDraft = null | { start: { x: number; y: number }; current: { x: number; y: number } }
 
-type Segment = { fromIndex: number; toIndex: number; insertIndex: number }
-
 type ViewBox = { x: number; y: number; width: number; height: number }
 
 type CanvasOverlayProps = {
@@ -30,10 +30,6 @@ type CanvasOverlayProps = {
   gridPattern: GridPattern | null
   previewInnerHtml: string
   svgContentRef: RefObject<SVGGElement | null>
-  selectedCount: number
-  selectedIndices: number[]
-  commands: PathCommand[]
-  segments: Segment[]
   selectionRect: SelectionRect
   matrix: DOMMatrix | null
   scale: number
@@ -51,7 +47,6 @@ type CanvasOverlayProps = {
   uiSelectionFill: string
   uiSelectionFillOpacity: number
   uiSelectionDash: string
-  transformedOutlineD: string
   addPoint: (insertIndex: number, x: number, y: number) => void
   selectOnlyPoint: (index: number) => void
   togglePointSelection: (index: number) => void
@@ -77,10 +72,6 @@ export function CanvasOverlay(props: CanvasOverlayProps) {
     gridPattern,
     previewInnerHtml,
     svgContentRef,
-    selectedCount,
-    selectedIndices,
-    commands,
-    segments,
     selectionRect,
     matrix,
     scale,
@@ -98,7 +89,6 @@ export function CanvasOverlay(props: CanvasOverlayProps) {
     uiSelectionFill,
     uiSelectionFillOpacity,
     uiSelectionDash,
-    transformedOutlineD,
     addPoint,
     selectOnlyPoint,
     togglePointSelection,
@@ -113,7 +103,16 @@ export function CanvasOverlay(props: CanvasOverlayProps) {
     getLocalPointFromEvent,
   } = props
 
+  // Fix A/B/C: Subscribe to commands + selectedIndices directly from store so
+  // CanvasOverlay re-renders when they change, but App does not.
+  const { commands, selectedIndices } = useEditorStore(
+    useShallow((s) => ({ commands: s.commands, selectedIndices: s.selectedIndices })),
+  )
+
   const selectedIndicesSet = useMemo(() => new Set(selectedIndices), [selectedIndices])
+  const selectedCount = selectedIndices.length
+  const segments = useMemo(() => getSegments(commands), [commands])
+  const transformedOutlineD = useMemo(() => buildTransformedPathD(commands, matrix, null), [commands, matrix])
 
   return (
     <>
@@ -259,7 +258,21 @@ export function CanvasOverlay(props: CanvasOverlayProps) {
           <g id="points">
             {commands.map((cmd, index) => {
               if (cmd.type === 'Z') return null
+
+              // Cull in overlay coordinate space (the space where circles are
+              // actually rendered). transformPoint applies the render matrix, so
+              // the result is in the same space as currentViewBox.
               const p = transformPoint(matrix, cmd.x, cmd.y, null)
+              const margin = 20
+              if (
+                p.x < viewBox.x - margin ||
+                p.x > viewBox.x + viewBox.width + margin ||
+                p.y < viewBox.y - margin ||
+                p.y > viewBox.y + viewBox.height + margin
+              ) {
+                return null
+              }
+
               const selected = selectedIndicesSet.has(index)
               return (
                 <NodeContextMenu

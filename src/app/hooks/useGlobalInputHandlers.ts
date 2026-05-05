@@ -25,6 +25,8 @@ export function useGlobalInputHandlers(opts: {
   pasteSectionAfterSelected: () => void
   undo: Undo
   redo: Redo
+  /** Fix 9: called at drag-end to flush live-doc state to React store. */
+  flushDragToSource: () => void
 }) {
   const {
     perfCountersRef,
@@ -44,6 +46,7 @@ export function useGlobalInputHandlers(opts: {
     pasteSectionAfterSelected,
     undo,
     redo,
+    flushDragToSource,
   } = opts
 
   useEffect(() => {
@@ -53,6 +56,12 @@ export function useGlobalInputHandlers(opts: {
       if (useEditorStore.getState().pan.active && panLastViewBoxRef.current) {
         perfCountersRef.current.viewBoxCommits += 1
         setCurrentViewBox(clampViewBox(panLastViewBoxRef.current))
+      }
+
+      // Fix 9: flush live-doc → React store before clearing drag state so
+      // the store has the final commands/sourceSvg.
+      if (useEditorStore.getState().drag.active) {
+        flushDragToSource()
       }
 
       if (useEditorStore.getState().drawTool === 'rect') {
@@ -143,6 +152,7 @@ export function useGlobalInputHandlers(opts: {
     copyActivePathToClipboard,
     deleteSelectedPoints,
     finishBoxSelection,
+    flushDragToSource,
     panLastViewBoxRef,
     pasteSectionAfterSelected,
     perfCountersRef,

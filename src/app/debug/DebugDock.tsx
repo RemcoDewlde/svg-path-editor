@@ -59,7 +59,6 @@ function formatXmlPretty(xml: string) {
 }
 
 export type DebugDockProps = {
-  outputPath: string
   // Editor callbacks
   applyPathCommands: (commands: PathCommand[]) => void
   applySvgSerialized: (serializedSvg: string, pathCount: number) => void
@@ -72,7 +71,9 @@ export type DebugDockProps = {
 }
 
 export function DebugDock(props: DebugDockProps) {
-  const { outputPath, applyPathCommands, applySvgSerialized, perfCountersRef, perfLastCountersRef, appRenderCountRef, lastAppRenderCountRef } = props
+  const { applyPathCommands, applySvgSerialized, perfCountersRef, perfLastCountersRef, appRenderCountRef, lastAppRenderCountRef } = props
+  // Compute outputPath locally so App doesn't need to subscribe to commands.
+  const outputPath = useEditorStore((s) => buildPath(s.commands))
 
   const {
     debugUiVisible,

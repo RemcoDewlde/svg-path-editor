@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { openSvgFile, saveSvgFile } from '@/editor/file'
 import { useEditorStore } from '@/editor/store'
+import { loadLiveDoc } from '@/editor/liveSvgDoc'
 
 type GetPathCountFromSvg = (fromSvg: string) => number
 
@@ -40,6 +41,7 @@ export function useFileIo(opts: { getPathCountFromSvg: GetPathCountFromSvg }) {
       if (svg.tagName.toLowerCase() !== 'svg') throw new Error('Input must contain an <svg> root element.')
 
       const serialized = new XMLSerializer().serializeToString(svg)
+      loadLiveDoc(serialized)
       setSourceSvg(serialized)
       setLastSavedSvg(serialized)
       clearHistory()
@@ -74,6 +76,7 @@ export function useFileIo(opts: { getPathCountFromSvg: GetPathCountFromSvg }) {
       const svg = doc.documentElement
       if (svg.tagName.toLowerCase() !== 'svg') throw new Error('Input must contain an <svg> root element.')
       const serialized = new XMLSerializer().serializeToString(svg)
+      loadLiveDoc(serialized)
       setSourceSvg(serialized)
       setLastSavedSvg(serialized)
       clearHistory()

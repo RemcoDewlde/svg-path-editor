@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { useEditorStore } from '@/editor/store'
@@ -146,6 +146,10 @@ export function useNodeEditor(args: UseNodeEditorArgs) {
     [commands, gridSize, pushHistory, setCommands, setSelectedIndices, setStatus, snapToGrid, syncCommandsToSource, updateSelectedPointInputs],
   )
 
+  // Fix 8: RAF ref for throttling drag-move React state updates.
+  const dragRafRef = useRef<number | null>(null)
+  const pendingDragUpdate = useRef<{ next: PathCommand[] } | null>(null)
+
   const moveSelectedPoints = useCallback(
     (currentLocalPoint: DOMPoint, selectedIndicesSet: Set<number>) => {
       if (!drag.active || !drag.startLocal || !drag.originalCommands) return
@@ -166,11 +170,25 @@ export function useNodeEditor(args: UseNodeEditorArgs) {
         return { ...c, x: c.x + dx, y: c.y + dy }
       })
 
-      setCommands(next)
-      syncCommandsToSource(next)
-      updateSelectedPointInputs(undefined, next)
+      // Fix 8: Store the latest computed commands and schedule a single React
+      // state update per animation frame instead of one per mousemove.
+      pendingDragUpdate.current = { next }
+
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(() => {
+          dragRafRef.current = null
+          const pending = pendingDragUpdate.current
+          if (!pending) return
+          pendingDragUpdate.current = null
+          setCommands(pending.next)
+          syncCommandsToSource(pending.next)
+          // Fix 10: skip setXInput/setYInput during drag — defer to drag-end
+          // via flushDragToSource. Writing to these Zustand fields triggers
+          // extra re-renders of the inspector panel on every frame.
+        })
+      }
     },
-    [drag, gridSize, pushHistory, setCommands, setDrag, snapToGrid, syncCommandsToSource, updateSelectedPointInputs],
+    [drag, gridSize, pushHistory, setCommands, setDrag, snapToGrid, syncCommandsToSource],
   )
 
   const deleteSelectedPoints = useCallback(
@@ -259,20 +277,29 @@ export function useNodeEditor(args: UseNodeEditorArgs) {
 
       pushHistory()
       const pts = indices.map((i) => commands[i]).filter(Boolean) as Array<{ type: 'M' | 'L'; x: number; y: number }>
-      const xs = pts.map((p) => p.x)
-      const ys = pts.map((p) => p.y)
+      // Fix 5: avoid Math.min/max(...spread) which can blow the call stack for
+      // large N. Use explicit loops instead.
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x
+        if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y
+        if (p.y > maxY) maxY = p.y
+      }
       const bounds: Bounds = {
-        minX: Math.min(...xs),
-        maxX: Math.max(...xs),
-        minY: Math.min(...ys),
-        maxY: Math.max(...ys),
-        centerX: (Math.min(...xs) + Math.max(...xs)) / 2,
-        centerY: (Math.min(...ys) + Math.max(...ys)) / 2,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2,
       }
 
+      // Fix 5: use a Set for O(1) lookup instead of O(K) Array.includes per node.
+      const indicesSet = new Set(indices)
       const next = commands.map((c, i) => {
         if (c.type === 'Z') return c
-        if (!indices.includes(i)) return c
+        if (!indicesSet.has(i)) return c
         const out = transformer(c.x, c.y, bounds)
         const snapped = snapPoint(out, snapToGrid, gridSize)
         return { ...c, x: snapped.x, y: snapped.y }

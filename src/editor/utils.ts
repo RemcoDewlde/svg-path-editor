@@ -1,5 +1,7 @@
 import type { PathCommand } from './types'
 
+export { parsePath, buildPath } from '@/wasm/index'
+
 export function createSvgPoint(svg: SVGSVGElement, x: number, y: number) {
   const p = svg.createSVGPoint()
   p.x = x
@@ -38,51 +40,6 @@ export function snapPoint(
     x: snapValue(point.x, snapToGrid, gridSize),
     y: snapValue(point.y, snapToGrid, gridSize),
   }
-}
-
-export function parsePath(d: string): PathCommand[] {
-  const tokens = d.match(/[MLZmlz]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []
-  const parsed: PathCommand[] = []
-  let index = 0
-  let command: string | null = null
-
-  while (index < tokens.length) {
-    const token = tokens[index]
-    if (/^[MLZmlz]$/.test(token)) {
-      command = token.toUpperCase()
-      index += 1
-    }
-
-    if (command === 'Z') {
-      parsed.push({ type: 'Z' })
-      command = null
-      continue
-    }
-
-    if (command === 'M' || command === 'L') {
-      const x = Number(tokens[index])
-      const y = Number(tokens[index + 1])
-      if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        throw new Error('Invalid path near: ' + tokens.slice(index, index + 3).join(' '))
-      }
-      parsed.push({ type: command as 'M' | 'L', x, y })
-      index += 2
-      continue
-    }
-
-    throw new Error('Expected M, L or Z command near: ' + token)
-  }
-
-  return parsed
-}
-
-export function buildPath(commands: PathCommand[]) {
-  return commands
-    .map((c) => {
-      if (c.type === 'Z') return 'Z'
-      return `${c.type} ${formatNumber(c.x)} ${formatNumber(c.y)}`
-    })
-    .join('\n')
 }
 
 export function getPathLabel(path: Element, index: number) {
@@ -159,26 +116,28 @@ export function getNextPointIndex(index: number, commands: PathCommand[]) {
 
 export function deleteIndicesFromCommands(commands: PathCommand[], selectedIndices: Set<number>) {
   const selected = new Set(selectedIndices)
-  const indexes = Array.from(selected).sort((a, b) => b - a)
-  let deletedCount = 0
 
-  indexes.forEach((index) => {
+  // Fix 4: promote M→L for the node immediately after a deleted M, then
+  // use a single O(N) filter pass instead of K×O(N) splice calls.
+  // We need the M-promotion pass before we remove entries.
+  selected.forEach((index) => {
     const command = commands[index]
-    if (!command || command.type === 'Z') return
-
-    if (command.type === 'M') {
-      const nextPointIndex = getNextPointIndex(index, commands)
-      if (nextPointIndex !== null && !selected.has(nextPointIndex)) {
-        const next = commands[nextPointIndex]
-        if (next && next.type !== 'Z') next.type = 'M'
-      }
+    if (!command || command.type !== 'M') return
+    const nextPointIndex = getNextPointIndex(index, commands)
+    if (nextPointIndex !== null && !selected.has(nextPointIndex)) {
+      const next = commands[nextPointIndex]
+      if (next && next.type !== 'Z') next.type = 'M'
     }
-
-    commands.splice(index, 1)
-    deletedCount += 1
   })
 
-  return deletedCount
+  const before = commands.length
+  // Single O(N) pass — no splice, no shifting.
+  const kept = commands.filter((_, i) => !selected.has(i))
+  // Mutate in-place so callers that hold a reference see the changes.
+  commands.length = 0
+  for (const c of kept) commands.push(c)
+
+  return before - commands.length
 }
 
 export function getTransformTargetIndices(commands: PathCommand[], selectedIndices: number[]) {

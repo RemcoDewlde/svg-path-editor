@@ -11,7 +11,6 @@ export function useActivePathSync(opts: {
   sourceSvg: string
   selectedPathIndex: number
   pathMetas: PathMeta[]
-  selectedIndices: number[]
   setCommands: (cmds: PathCommand[]) => void
   setSelectedIndices: (indices: number[]) => void
   setRangeStartIndex: (value: number | null) => void
@@ -36,7 +35,6 @@ export function useActivePathSync(opts: {
     sourceSvg,
     selectedPathIndex,
     pathMetas,
-    selectedIndices,
     setCommands,
     setSelectedIndices,
     setRangeStartIndex,
@@ -71,7 +69,7 @@ export function useActivePathSync(opts: {
 
     const activePathKey = meta.id ? `id:${meta.id}` : `index:${selectedPathIndex}`
     const stayingOnSamePath = lastActivePathIdRef.current === activePathKey
-    const prevSelected = selectedIndices
+    const prevSelected = useEditorStore.getState().selectedIndices
 
     setDrag({ active: false, startLocal: null, originalCommands: null })
     setSelectionBox({ active: false, start: null, current: null })

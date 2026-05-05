@@ -4,7 +4,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 
 import { useEditorStore } from '@/editor/store'
 import type { PathCommand, PerfCounters, RenameTarget } from '@/editor/types'
-import { buildPath, buildTransformedPathD, createSvgPoint, deleteIndicesFromCommands, formatNumber, getSegments, transformPoint } from '@/editor/utils'
+import { buildPath, createSvgPoint, deleteIndicesFromCommands, formatNumber, transformPoint } from '@/editor/utils'
+import { getInnerHtml, isLiveDocLoaded, loadLiveDoc, serializeLiveDoc, setActivePath } from '@/editor/liveSvgDoc'
 
 import { DebugDock } from '@/app/debug/DebugDock'
 import { TopBar } from '@/app/topbar/TopBar'
@@ -44,9 +45,7 @@ export default function App() {
     setPathMetas,
     selectedPathIndex,
     setSelectedPathIndex,
-    commands,
     setCommands,
-    selectedIndices,
     setSelectedIndices,
     status,
     setStatus,
@@ -116,6 +115,13 @@ export default function App() {
     uiGridMajorStroke,
   } = useEditorStore()
 
+  // Fix A: commands + selectedIndices are NOT read reactively in App.
+  // All callbacks that need them call useEditorStore.getState() inside their
+  // body so they always see fresh values without subscribing App to re-renders.
+  // selectedIndicesLength is the only count needed for conditional rendering
+  // (EditPointDialog canApply, commandMenuItems hasSelection).
+  const selectedIndicesLength = useEditorStore((s) => s.selectedIndices.length)
+
   useEffect(() => {
     // Used by CSS for hover styling.
     document.documentElement.style.setProperty('--ui-segment-hover-stroke', uiSegmentHoverStroke)
@@ -135,7 +141,7 @@ export default function App() {
     return () => prefersDark.removeEventListener('change', onChange)
   }, [themeMode])
 
-  const selectedIndicesSet = useMemo(() => new Set(selectedIndices), [selectedIndices])
+  // selectedIndicesSet is no longer used in App — CanvasOverlay computes it directly.
 
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<'general' | 'grid' | 'appearance' | 'keys'>('general')
@@ -190,12 +196,15 @@ export default function App() {
     return sourceSvg !== lastSavedSvg
   }, [sourceSvg, lastSavedSvg])
 
+  // Fix 2: read innerHTML directly from the live doc — no second DOMParser call.
+  // The live doc is kept in sync by loadLiveDoc / mutateSvg / setActivePath.
+  // We still depend on sourceSvg so React re-renders when the SVG changes.
   const previewInnerHtml = useMemo(() => {
     if (!sourceSvg) return ''
-    const doc = new DOMParser().parseFromString(sourceSvg, 'image/svg+xml')
-    const parserError = doc.querySelector('parsererror')
-    if (parserError) return ''
-    return doc.documentElement.innerHTML
+    // If the live doc isn't loaded yet (e.g. first render before any mutation),
+    // load it now so getInnerHtml() works.
+    if (!isLiveDocLoaded()) loadLiveDoc(sourceSvg)
+    return getInnerHtml()
   }, [sourceSvg])
 
   const getPreviewPathElement = useCallback(
@@ -217,6 +226,29 @@ export default function App() {
     if (!editorScreenMatrix || !pathScreenMatrix) return null
     return editorScreenMatrix.inverse().multiply(pathScreenMatrix)
   }, [getPreviewPathElement])
+
+  // Fix 3: Cache the render matrix so we don't call getScreenCTM() (layout-
+  // forcing) unconditionally on every render.  We recompute it:
+  //  - when the SVG container resizes (ResizeObserver)
+  //  - when the viewBox changes (pan / zoom)
+  //  - when the selected path changes (different element → different CTM)
+  const matrixCacheRef = useRef<DOMMatrix | null>(null)
+
+  const recomputeMatrix = useCallback(() => {
+    matrixCacheRef.current = getRenderMatrix()
+  }, [getRenderMatrix])
+
+  // Recompute on resize.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => { recomputeMatrix() })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [recomputeMatrix])
+
+  // Recompute when viewBox or selected path changes.
+  useEffect(() => { recomputeMatrix() }, [currentViewBox, selectedPathIndex, recomputeMatrix])
 
   const getLocalPointFromEvent = useCallback(
     (event: MouseEvent) => {
@@ -256,7 +288,7 @@ export default function App() {
   }, [baseViewBox.width, currentViewBox.width])
 
   const getOverlayScale = useCallback(() => {
-    const matrix = getRenderMatrix()
+    const matrix = matrixCacheRef.current ?? getRenderMatrix()
     if (!matrix) return 1
     const scaleX = Math.hypot(matrix.a, matrix.b)
     const scaleY = Math.hypot(matrix.c, matrix.d)
@@ -272,14 +304,25 @@ export default function App() {
       if (!sourceSvg || selectedPathIndex < 0) return
       try {
         const d = buildPath(nextCommands)
+
+        // Fix 9 (hot path): During drag, update only the active path's `d`
+        // attribute in the live doc DOM — no XMLSerializer, no setSourceSvg,
+        // no setPathMetas. The DOM mutation is immediately visible in the
+        // browser; React state is flushed at drag-end by flushDragToSource().
+        // setCommands is called by the RAF callback in moveSelectedPoints so
+        // CanvasOverlay node positions stay in sync.
+        if (useEditorStore.getState().drag.active) {
+          setActivePath(selectedPathIndex, d)
+          return
+        }
+
+        // Non-drag path: full mutateSvg (updates live doc + returns serialized).
         const serialized = mutateSvg(sourceSvg, (_svg, paths) => {
           const target = paths[selectedPathIndex]
           if (!target) return
           target.setAttribute('d', d)
         })
         setSourceSvg(serialized)
-
-        // Update just the active list item to avoid re-parsing state during drag.
         setPathMetas(useEditorStore.getState().pathMetas.map((m) => (m.index === selectedPathIndex ? { ...m, d } : m)))
       } catch {
         // ignore
@@ -315,7 +358,6 @@ export default function App() {
     sourceSvg,
     selectedPathIndex,
     pathMetas,
-    selectedIndices,
     setCommands,
     setSelectedIndices,
     setRangeStartIndex,
@@ -369,6 +411,7 @@ export default function App() {
       return
     }
 
+    const { commands, selectedIndices } = useEditorStore.getState()
     const indices = selectedIndices
       .filter((i) => commands[i] && commands[i].type !== 'Z')
       .slice()
@@ -578,6 +621,7 @@ export default function App() {
       return
     }
 
+    const { commands, selectedIndices } = useEditorStore.getState()
     const selectedSorted = selectedIndices.slice().sort((a, b) => a - b)
     const lastNonZ = (() => {
       for (let i = commands.length - 1; i >= 0; i -= 1) {
@@ -600,9 +644,10 @@ export default function App() {
     setSelectedIndices(nextSel)
     updateSelectedPointInputs(nextSel)
     setStatus(`Pasted ${pasted.length} node${pasted.length === 1 ? '' : 's'}.`)
-  }, [clipboardCommands, clipboardPath, commands, getPathCountFromSvg, pushHistory, selectedIndices, selectedPathIndex, setCommands, setSelectedIndices, setSelectedPathIndex, setSourceSvg, setStatus, sourceSvg, syncCommandsToSource, updateSelectedPointInputs])
+  }, [clipboardCommands, clipboardPath, getPathCountFromSvg, pushHistory, selectedPathIndex, setCommands, setSelectedIndices, setSelectedPathIndex, setSourceSvg, setStatus, sourceSvg, syncCommandsToSource, updateSelectedPointInputs])
 
   function openPointEditorForIndex(index: number) {
+    const { commands } = useEditorStore.getState()
     const cmd = commands[index]
     if (!cmd || cmd.type === 'Z') return
     setPointEditorX(formatNumber(cmd.x))
@@ -622,8 +667,9 @@ export default function App() {
     const y1 = Math.min(latest.start.y, latest.current.y)
     const x2 = Math.max(latest.start.x, latest.current.x)
     const y2 = Math.max(latest.start.y, latest.current.y)
-    const matrix = getRenderMatrix()
+    const matrix = matrixCacheRef.current ?? getRenderMatrix()
 
+    const { commands } = useEditorStore.getState()
     const next: number[] = []
     commands.forEach((c, i) => {
       if (c.type === 'Z') return
@@ -633,7 +679,7 @@ export default function App() {
     setSelectedIndices(next)
     updateSelectedPointInputs(next)
     setStatus(`${next.length} nodes selected.`)
-  }, [commands, getRenderMatrix, setSelectedIndices, setStatus, updateSelectedPointInputs])
+  }, [getRenderMatrix, setSelectedIndices, setStatus, updateSelectedPointInputs])
 
   // Refresh list for non-drag updates
   useEffect(() => {
@@ -645,7 +691,7 @@ export default function App() {
 
   const commandMenuItems = buildCommandMenuItems({
     hasDoc: Boolean(sourceSvg),
-    hasSelection: selectedIndices.length > 0,
+    hasSelection: selectedIndicesLength > 0,
     themeMode,
     gridVisible,
     snapToGrid,
@@ -683,6 +729,19 @@ export default function App() {
     })
   }, [previewInnerHtml, selectedPathIndex])
 
+  // Fix 9+10: Flush live-doc state to React store once at drag-end, instead of
+  // calling setSourceSvg + setPathMetas on every RAF frame during drag.
+  // Also update the x/y inspector inputs once here instead of every frame.
+  const flushDragToSource = useCallback(() => {
+    if (selectedPathIndex < 0) return
+    const serialized = serializeLiveDoc()
+    const cmds = useEditorStore.getState().commands
+    const d = buildPath(cmds)
+    setSourceSvg(serialized)
+    setPathMetas(useEditorStore.getState().pathMetas.map((m) => (m.index === selectedPathIndex ? { ...m, d } : m)))
+    updateSelectedPointInputs(undefined, cmds)
+  }, [selectedPathIndex, setPathMetas, setSourceSvg, updateSelectedPointInputs])
+
   useGlobalInputHandlers({
     perfCountersRef,
     panLastViewBoxRef,
@@ -701,19 +760,18 @@ export default function App() {
     pasteSectionAfterSelected,
     undo,
     redo,
+    flushDragToSource,
   })
 
-  const outputPath = useMemo(() => buildPath(commands), [commands])
+  // Fix A: outputPath, transformedOutlineD, segments are now computed in
+  // CanvasOverlay/DebugDock directly from the store — not in App.
 
-  // Render matrix is derived from SVG DOM refs.
+  // Fix 3: Use cached render matrix — no layout-forcing getScreenCTM() per render.
   // eslint-disable-next-line react-hooks/refs
-  const matrix = getRenderMatrix()
+  const matrix = matrixCacheRef.current ?? getRenderMatrix()
   // eslint-disable-next-line react-hooks/refs
   const scale = effectiveHandleScale()
   const handleScale = getHandleScale()
-  // eslint-disable-next-line react-hooks/refs
-  const transformedOutlineD = useMemo(() => buildTransformedPathD(commands, matrix, svgRef.current), [commands, matrix])
-  const segments = useMemo(() => getSegments(commands), [commands])
 
   const pointRadiusBase = useMemo(() => {
     switch (uiPointSize) {
@@ -755,8 +813,6 @@ export default function App() {
     }
   }, [gridVisible, gridSize, majorGridEvery, uiGridStroke, uiGridMajorStroke])
 
-  const selectedCount = selectedIndices.length
-
   return (
     <TooltipProvider delayDuration={250}>
       <CommandMenu open={commandMenuOpen} onOpenChange={setCommandMenuOpen} items={commandMenuItems} />
@@ -790,7 +846,7 @@ export default function App() {
         setX={setPointEditorX}
         setY={setPointEditorY}
         onApply={applyPointEditor}
-        canApply={selectedIndices.length === 1}
+        canApply={selectedIndicesLength === 1}
       />
 
       <SettingsDialog
@@ -848,8 +904,6 @@ export default function App() {
               inspectorCollapsed={inspectorCollapsed}
               setInspectorCollapsed={setInspectorCollapsed}
               sourceSvgPresent={Boolean(sourceSvg)}
-              commandsLength={commands.length}
-              selectedCount={selectedCount}
               activePathPresent={Boolean(activePathMeta)}
               drawTool={drawTool}
               setDrawTool={setDrawTool}
@@ -891,7 +945,6 @@ export default function App() {
                   svgContentRef={svgContentRef}
                   sourceSvgPresent={Boolean(sourceSvg)}
                   zoomPercent={zoomPercent}
-                  selectedCount={selectedCount}
                   cursorPoint={cursorPoint}
                   onZoomIn={zoomIn}
                   onZoomOut={zoomOut}
@@ -927,12 +980,8 @@ export default function App() {
                     },
                   }}
                   moveSelectedPoints={moveSelectedPoints}
-                  selectedIndicesSet={selectedIndicesSet}
-                  selectedIndices={selectedIndices}
                   gridPattern={gridPattern}
                   previewInnerHtml={previewInnerHtml}
-                  commands={commands}
-                  segments={segments}
                   selectionRect={selectionRect}
                   matrix={matrix}
                   scale={scale}
@@ -947,7 +996,6 @@ export default function App() {
                   uiSelectionFill={uiSelectionFill}
                   uiSelectionFillOpacity={Number(uiSelectionFillOpacity) || 0}
                   uiSelectionDash={uiSelectionDash}
-                  transformedOutlineD={transformedOutlineD}
                   addPoint={addPoint}
                   selectOnlyPoint={selectOnlyPoint}
                   togglePointSelection={togglePointSelection}
@@ -962,7 +1010,6 @@ export default function App() {
                 />
 
                 <DebugDock
-                  outputPath={outputPath}
                   applyPathCommands={(cmds) => {
                     setCommands(cmds)
                     syncCommandsToSource(cmds)

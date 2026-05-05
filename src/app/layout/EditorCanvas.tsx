@@ -4,8 +4,9 @@ import type { RefObject } from 'react'
 
 import { CanvasHud } from '@/app/canvas/CanvasHud'
 import { CanvasOverlay } from '@/app/canvas/CanvasOverlay'
+import { useEditorStore } from '@/editor/store'
 
-import type { DragState, PathCommand, ViewBox } from '@/editor/types'
+import type { DragState, ViewBox } from '@/editor/types'
 import { formatNumber, type Bounds } from '@/editor/utils'
 
 export function EditorCanvas(props: {
@@ -15,7 +16,6 @@ export function EditorCanvas(props: {
   sourceSvgPresent: boolean
 
   zoomPercent: number
-  selectedCount: number
   cursorPoint: { x: number; y: number } | null
   onZoomIn: () => void
   onZoomOut: () => void
@@ -52,14 +52,10 @@ export function EditorCanvas(props: {
     dragMoves: () => void
   }
   moveSelectedPoints: (p: DOMPoint, selectedIndicesSet: Set<number>) => void
-  selectedIndicesSet: Set<number>
-  selectedIndices: number[]
 
   // Overlay render props
   gridPattern: null | { size: number; majorSize: number; stroke: string; majorStroke: string }
   previewInnerHtml: string
-  commands: PathCommand[]
-  segments: Array<{ fromIndex: number; toIndex: number; insertIndex: number }>
   selectionRect: null | { x: number; y: number; width: number; height: number }
   matrix: DOMMatrix | null
   scale: number
@@ -74,7 +70,6 @@ export function EditorCanvas(props: {
   uiSelectionFill: string
   uiSelectionFillOpacity: number
   uiSelectionDash: string
-  transformedOutlineD: string
 
   addPoint: (insertIndex: number, x: number, y: number) => void
   selectOnlyPoint: (index: number) => void
@@ -88,6 +83,10 @@ export function EditorCanvas(props: {
   deleteSelectedPoints: () => void
   setDrag: (next: DragState) => void
 }) {
+  // Subscribe to selectedIndices here so CanvasHud shows correct count
+  // without App needing to re-render on every selection change.
+  const selectedCount = useEditorStore((s) => s.selectedIndices.length)
+
   return (
     <main
       className="relative min-h-0 flex-1 overflow-hidden min-w-0"
@@ -101,7 +100,7 @@ export function EditorCanvas(props: {
     >
       <CanvasHud
         zoomPercent={props.zoomPercent}
-        selectedCount={props.selectedCount}
+        selectedCount={selectedCount}
         cursorText={props.cursorPoint ? `x ${formatNumber(props.cursorPoint.x)}  y ${formatNumber(props.cursorPoint.y)}` : 'x -  y -'}
         onZoomIn={props.onZoomIn}
         onZoomOut={props.onZoomOut}
@@ -205,7 +204,9 @@ export function EditorCanvas(props: {
             props.perfCounters.dragMoves()
             const p = props.getLocalPointFromEvent(e.nativeEvent)
             if (!p) return
-            props.moveSelectedPoints(p, props.selectedIndicesSet)
+            // Read selectedIndices from store at event time — no reactive subscription needed.
+            const selectedIndicesSet = new Set(useEditorStore.getState().selectedIndices)
+            props.moveSelectedPoints(p, selectedIndicesSet)
           }
         }}
         onMouseLeave={() => props.setCursorPointCoalesced(null)}
@@ -215,10 +216,6 @@ export function EditorCanvas(props: {
           gridPattern={props.gridPattern}
           previewInnerHtml={props.previewInnerHtml}
           svgContentRef={props.svgContentRef}
-          selectedCount={props.selectedCount}
-          selectedIndices={props.selectedIndices}
-          commands={props.commands}
-          segments={props.segments}
           selectionRect={props.selectionRect}
           matrix={props.matrix}
           scale={props.scale}
@@ -236,7 +233,6 @@ export function EditorCanvas(props: {
           uiSelectionFill={props.uiSelectionFill}
           uiSelectionFillOpacity={props.uiSelectionFillOpacity}
           uiSelectionDash={props.uiSelectionDash}
-          transformedOutlineD={props.transformedOutlineD}
           addPoint={props.addPoint}
           selectOnlyPoint={props.selectOnlyPoint}
           togglePointSelection={props.togglePointSelection}

@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 import type { PathCommand } from '@/editor/types'
 import { flipBothTransformer, rotateTransformer, type Bounds } from '@/editor/utils'
+import { useEditorStore } from '@/editor/store'
 
 import { LayoutPanelLeft, Grip, Trash2, X, RotateCcw, RotateCw, Repeat2, Scissors } from 'lucide-react'
 
@@ -19,8 +20,6 @@ export function InspectorSidebar(props: {
   setInspectorCollapsed: (collapsed: boolean) => void
 
   sourceSvgPresent: boolean
-  commandsLength: number
-  selectedCount: number
   activePathPresent: boolean
 
   drawTool: 'select' | 'pen' | 'rect'
@@ -55,6 +54,11 @@ export function InspectorSidebar(props: {
   onOpenLogDialog: () => void
   onClearLog: () => void
 }) {
+  // Subscribe to commands/selectedIndices here so InspectorSidebar buttons
+  // stay correctly enabled/disabled without App needing to re-render.
+  const commandsLength = useEditorStore((s) => s.commands.length)
+  const selectedCount = useEditorStore((s) => s.selectedIndices.length)
+
   const actions = {
     selectAllNodes: props.selectAllNodes,
     clearSelection: props.clearSelection,
@@ -95,7 +99,7 @@ export function InspectorSidebar(props: {
             <div className="flex flex-col items-center gap-1 p-1">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.selectAllNodes} disabled={!props.commandsLength}>
+                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.selectAllNodes} disabled={!commandsLength}>
                     <Grip className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
@@ -104,7 +108,7 @@ export function InspectorSidebar(props: {
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.clearSelection} disabled={!props.selectedCount}>
+                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.clearSelection} disabled={!selectedCount}>
                     <X className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
@@ -113,7 +117,7 @@ export function InspectorSidebar(props: {
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.deleteSelectedPoints} disabled={!props.selectedCount}>
+                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.deleteSelectedPoints} disabled={!selectedCount}>
                     <Trash2 className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
@@ -122,7 +126,7 @@ export function InspectorSidebar(props: {
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.extractSelectionToNewPath} disabled={!props.selectedCount}>
+                  <Button size="icon" variant="ghost" className="h-12 w-12" onClick={props.extractSelectionToNewPath} disabled={!selectedCount}>
                     <Scissors className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
@@ -150,7 +154,7 @@ export function InspectorSidebar(props: {
                     variant="ghost"
                     className="h-12 w-12"
                     onClick={() => props.transformSelectedNodes(rotateTransformer(-90), 'Rotate -90 deg')}
-                    disabled={!props.selectedCount}
+                    disabled={!selectedCount}
                   >
                     <RotateCcw className="h-5 w-5" />
                   </Button>
@@ -165,7 +169,7 @@ export function InspectorSidebar(props: {
                     variant="ghost"
                     className="h-12 w-12"
                     onClick={() => props.transformSelectedNodes(rotateTransformer(90), 'Rotate 90 deg')}
-                    disabled={!props.selectedCount}
+                    disabled={!selectedCount}
                   >
                     <RotateCw className="h-5 w-5" />
                   </Button>
@@ -180,7 +184,7 @@ export function InspectorSidebar(props: {
                     variant="ghost"
                     className="h-12 w-12"
                     onClick={() => props.transformSelectedNodes(flipBothTransformer, 'Flip 180 deg')}
-                    disabled={!props.selectedCount}
+                    disabled={!selectedCount}
                   >
                     <Repeat2 className="h-5 w-5" />
                   </Button>

@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { useEditorStore } from '@/editor/store'
 import type { PathCommand } from '@/editor/types'
+import { loadLiveDoc } from '@/editor/liveSvgDoc'
 
 type Snapshot = { selectedPathIndex: number; svg: string; commands: PathCommand[] }
 
@@ -79,6 +80,8 @@ export function useHistory(syncCommandsToSource: (cmds: PathCommand[]) => void, 
       const preservedBase = { ...baseViewBox }
       const preservedCurrent = { ...currentViewBox }
 
+      // Load the snapshot SVG into the live doc before refreshPathMetas reads it.
+      loadLiveDoc(snap.svg)
       setSourceSvg(snap.svg)
       refreshPathMetas(snap.svg)
       setSelectedPathIndex(snap.selectedPathIndex)
